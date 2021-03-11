@@ -33,6 +33,7 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
 
     def get_invoice(self):
         now = datetime.datetime.now()
+        self.form.textEdit.setStyleSheet("background-color: rgb(0, 0, 0);")
         f_path = str(self.form.oba_file_path.toPlainText())
         filled_en = str(self.form.txten.text())
         f_data = {'rt': '', 'packing_lot': '', 'po_num': '', 'part_num': '', 'qty': '', 'inv': ''}
@@ -75,8 +76,7 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
             self.form.lbl_app_status.setText('Found Invoice# {}'.format(tmp_inv))
             # get check box operation
             which_opn = self.check_opn_box()
-            print(which_opn)
-            if not which_opn['opn1501'] and not which_opn['opn702'] :
+            if not which_opn['opn1501'] and not which_opn['opn702']:
                 mbox('No FITS OPN select.', 'Not found FITS OPN selected.\nPlease select target OPN.', 0)
                 return
             if which_opn['opn1501']:
@@ -87,34 +87,33 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
                     # get Packing Number from FITS
                     f_data['packing_lot'] = find_packing_num(f_data['rt'])
 
-                # prepare data
+                # prepare data_stream
                 packing_no = f_data['packing_lot']
-                packing_qty = f_data['qty']
-                rt = f_data['rt']
-                pass_kitting_qty = ''
-                build_type = ''
-                pid = ''
-                po_num = f_data['po_num']
-                part_num = f_data['part_num']
-                mpn = ''
-                supplier_name = ''
-                mother_lot_qty = ''
-                shipment_req_qty = ''
-                sampling_type = ''
-                sampling_qty = ''
-                result = 'PASS'
+                oba_info = prepare_oba_info(packing_no)
+                print(oba_info)
 
-                # create date_stream
-                data_stream = filled_en + ',' + inv_num + ',' + packing_no + ',' + packing_qty + ',' + rt + ',' \
-                              + pass_kitting_qty + ',' + build_type + ',' + pid + ',' + po_num + ',' + part_num \
-                              + mpn + ',' + supplier_name + ',' + mother_lot_qty + ',' + shipment_req_qty \
-                              + sampling_type + ',' + sampling_qty + ',' + result
-                print(data_stream)
-                # hand_check opn
+                # create data1501
+                data1501 = filled_en + ',' + inv_num + ',' + f_data['packing_lot'] + ',' + oba_info
+                print('Opn.1501 param: {}'.format(opn1501_param))
+                print('Data stream: {}'.format(data1501))
+                # hand_check data and operation
                 route_check = valid_inv('1501', inv_num)
                 if route_check['status']:
-
-                    return
+                    # save FITS data
+                    print('Recording data...')
+                    if record2fit('1501', opn1501_param, data1501):
+                        print('Save data opn.1501 OBA completed.')
+                        self.form.txt_inv.setFocus()
+                        self.form.txt_inv.setText('')
+                        self.form.textEdit.setStyleSheet("background-color: rgb(0, 255, 0);")
+                        self.form.lbl_app_status.setText('Invoice no.{} is saved successful.'.format(inv_num))
+                    else:
+                        print('Cannot save data opn.1501 OBA.')
+                        self.form.txt_inv.setFocus()
+                        self.form.txt_inv.setText('')
+                        self.form.textEdit.setStyleSheet("background-color: rgb(255, 0, 0);")
+                        self.form.lbl_app_status.setText('FITS Error: Cannot save opn.1501')
+                        return
                 else:
                     self.form.lbl_app_status.setText('FITSDLL Error')
                     mbox(u'FITSDLL Error', Unicode(route_check["msg"]), 0)
@@ -122,8 +121,43 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
 
             if which_opn['opn702']:
                 # Opn.702 Shipment SN
-                return
-
+                sn_list = get_sn_list(f_data['rt'])
+                print(sn_list)
+                for sn in sn_list.split(','):
+                    print('Serial No.:{}'.format(sn))
+                    print('Validate route...')
+                    route_check = valid_inv('702', sn)
+                    print(route_check['status'])
+                    if route_check['status']:
+                        # get last operation
+                        print('Get last operation...')
+                        last_opn = get_last_opn(sn)
+                        print('Last operation of SN: {} is {}'.format(sn, last_opn))
+                        if last_opn == '601_B':
+                            print('Ready to save...')
+                            # prepare data_stream
+                            data702 = filled_en + ',' + inv_num + ',' + sn + ',' + f_data['packing_lot'] + ',' + str(f_data['qty'])
+                            print('Data stream: {}'.format(data702))
+                            print('Opn.702 param: {}'.format(opn702_param))
+                            print('Record data...')
+                            if record2fit('702', opn702_param, data702):
+                                self.form.txt_inv.setFocus()
+                                self.form.txt_inv.setText('')
+                                self.form.textEdit_2.setStyleSheet("background-color: rgb(0, 255, 0);")
+                                self.form.lbl_app_status.setText('Invoice no.{} : {} successful.'.format(inv_num, sn))
+                            else:
+                                self.form.txt_inv.setFocus()
+                                self.form.txt_inv.setText('')
+                                self.form.textEdit_2.setStyleSheet("background-color: rgb(255, 0, 0);")
+                                self.form.lbl_app_status.setText('FITS Error: Cannot save opn.702')
+                                return
+                        else:
+                            print('This SN: {} does not pack yet'.format(sn))
+                            return
+                    else:
+                        self.form.lbl_app_status.setText('FITSDLL Error')
+                        mbox(u'FITSDLL Error', Unicode(route_check["msg"]), 0)
+                        return
         else:
             mbox('Not found Invoice# {}'.format(inv_num), 'Not found Invoice# {} in OBA Summary File'.format(inv_num), 0)
             return
@@ -370,6 +404,7 @@ def cross_check_inv(xlsx_path, inv, f_data):
     print('Cross Check Invoice number# {}'.format(inv))
     oba_wb = load_workbook(xlsx_path)
     output = oba_wb.active
+    print(output.title)
     for row in range(5, output.max_row):
         # get invoice#
         if output.cell(row=row, column=10).value is None:
@@ -377,29 +412,21 @@ def cross_check_inv(xlsx_path, inv, f_data):
         tmp_inv = output.cell(row=row, column=10).value
         print(tmp_inv)
         if re.search(inv, tmp_inv, re.IGNORECASE):
+            f_data['rt'] = output.cell(row=row, column=2).value
+            print(f_data['rt'])
+            f_data['packing_lot'] = output.cell(row=row, column=3).value
+            print(f_data['packing_lot'])
+            f_data['po_num'] = output.cell(row=row, column=4).value
+            print(f_data['po_num'])
+            f_data['part_num'] = output.cell(row=row, column=5).value
+            print(f_data['part_num'])
+            f_data['qty'] = output.cell(row=row, column=6).value
+            print(f_data['qty'])
             inv_num = "{}".format(output.cell(row=row, column=10).value)
             f_data['inv'] = inv_num.split('\n')[0]
             print(f_data['inv'])
             return True
     return False
-
-    # oba_workbook = xlrd.open_workbook(xls_path)
-    # output = oba_workbook.sheet_by_name('Output')
-    # print(output.nrows)
-    # for row in range(0, output.nrows):
-    #     tmp_inv = output.cell_value(rowx=row, colx=10)
-    #     print(tmp_inv)
-    #     if re.search(inv, tmp_inv, re.IGNORECASE):
-    #         f_data['rt'] = str(output.cell_value(rowx=row, colx=2))
-    #         f_data['packing_lot'] = str(output.cell_value(rowx=row, colx=3))
-    #         f_data['po_num'] = str(output.cell_value(rowx=row, colx=4))
-    #         f_data['part_num'] = str(output.cell_value(rowx=row, colx=5))
-    #         f_data['qty'] = str(output.cell_value(rowx=row, colx=6))
-    #         inv_num = "{}".format(output.cell_value(rowx=row, colx=10))
-    #         f_data['inv'] = inv_num.replace('\n', '')
-    #         print(f_data['inv'])
-    #         return True
-    # return False
 
 
 def cross_check_etr(xls_path, etr, f_data):
