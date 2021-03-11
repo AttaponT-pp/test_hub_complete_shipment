@@ -227,21 +227,21 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
                 mbox("Warning !!!", "This ETR Number:" + etr + ". have been blocked in Opn.924 RTV Shipment Blocking"
                                                                "Please inform case owner for unblock.")
                 self.form.lbl_app_status.setText("ETR Number:" + etr + " have been blocked RTV Shipment")
-                self.form.txt_etr.setText("")
                 self.form.txt_etr.setFocus()
+                self.form.txt_etr.setText("")
 
             self.form.lbl_app_status.setText('Found Invoice {}'.format(tmp_inv))
             which_opn = self.check_opn_box()
 
-            if which_opn["opn1502"] == False and which_opn["opn1801"] == False:
+            if not which_opn["opn1502"] and not which_opn["opn1801"]:
                 mbox(u'No FITS OPN Selected', u'Please Select FITS Operation to record.', 0)
                 return
 
-            if which_opn["opn1502"] == True:
+            if which_opn["opn1502"]:
                 # Create data_str input stream
                 data_str = filled_en + ',' + tmp_inv + ',' + etr + ',' + block_status
                 fit_status = valid_inv('1502', tmp_inv)
-                if fit_status["status"] == True:
+                if fit_status["status"]:
                     # Add Parameter 'RTV Shipment Blocking'
                     param1502_str = 'OPERATOR,Invoice No,ETR Number,RTV Shipment Blocking'
                     print(param1502_str)
@@ -250,16 +250,17 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
                         self.form.lbl_app_status.setText('FITS1502 Saved for {}'.format(etr))
                         self.form.txt_etr.setText("")
                         self.form.txt_etr.setFocus()
+                        self.form.textEdit_3.setStyleSheet("background-color: rgb(0, 255, 0);")
                     else:
                         mbox(u'FITSDLL Error', u'Cannot save data to FITS', 0)
-                        self.CleanupCtrs()
+                        self.form.textEdit_3.setStyleSheet("background-color: rgb(255, 0, 0);")
                         return
                 else:
                     mbox(u'FITSDLL Error', Unicode(fit_status["msg"]), 0)
-                    self.CleanupCtrs()
+                    self.form.textEdit_3.setStyleSheet("background-color: rgb(255, 0, 0);")
                     return
 
-            if which_opn["opn1801"] == True:
+            if which_opn["opn1801"]:
                 time.sleep(1)
                 init('1801')
                 # Create data_str input stream
@@ -278,9 +279,10 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
                             self.form.lbl_app_status.setText('FITS1801 Saved for {}'.format(etr))
                             self.form.txt_etr.setText("")
                             self.form.txt_etr.setFocus()
+                            self.form.textEdit_4.setStyleSheet("background-color: rgb(0, 255, 0);")
                         else:
                             mbox(u'FITSDLL Error', u'Cannot save data to FITS', 0)
-                            self.CleanupCtrs()
+                            self.form.textEdit_4.setStyleSheet("background-color: rgb(255, 0, 0);")
                             return
                     else:
                         for sn in data1303:
@@ -293,14 +295,15 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
                                     self.form.lbl_app_status.setText('FITS1801 Saved for {}'.format(etr))
                                     self.form.txt_etr.setText("")
                                     self.form.txt_etr.setFocus()
+                                    self.form.textEdit_4.setStyleSheet("background-color: rgb(0, 255, 0);")
                                 else:
                                     mbox(u'FITSDLL Error', u'Cannot save data to FITS', 0)
-                                    self.CleanupCtrs()
+                                    self.form.textEdit_4.setStyleSheet("background-color: rgb(255, 0, 0);")
                                     return
 
                 else:
                     mbox(u'FITSDLL Error', u'Unable to init FITs DB', 0)
-                    self.CleanupCtrs()
+                    self.form.textEdit_4.setStyleSheet("background-color: rgb(255, 0, 0);")
                     return
 
         else:
@@ -430,23 +433,39 @@ def cross_check_inv(xlsx_path, inv, f_data):
 
 
 def cross_check_etr(xls_path, etr, f_data):
-    rtv_workbook = xlrd.open_workbook(xls_path)
-    shipment = rtv_workbook.sheet_by_name('Shipment')
-
-    for row in range(0, shipment.nrows):
-
-        hold = shipment.cell_value(rowx=row, colx=22)
-        # hold = shipment.cell_value(rowx=row, colx=23)
-        print(hold)
-        if re.search(etr, hold, re.IGNORECASE):
-            inv_num = "{}" .format(shipment.cell_value(row, 21))
-            # inv_num = "{}".format(shipment.cell_value(row, 22))
-            f_data['inv'] = inv_num.replace(" ", "")
-            print(f_data['inv'])
-            # f_data['rt'] = str(shipment.cell(row, 4).value).replace(" ", "")
-            # f_data['qty'] = str(shipment.cell(row, 9).value).replace(" ", "")
+    print('Cross Check ETR: {}'.format(etr))
+    rtv_wb = load_workbook(xls_path)
+    shipment = rtv_wb.active
+    print(shipment.title)
+    for row in range(0, shipment.max_row):
+        if shipment.cell(row=row, column=12).value is None:
+            break
+        # get ETR#
+        tmp_etr = shipment.cell(row=row, column=23).value
+        print(tmp_etr)
+        if re.search(etr, tmp_etr, re.IGNORECASE):
+            delivery_num = shipment.cell(row=row, column=22).value
+            f_data['inv'] = delivery_num
             return True
     return False
+
+    # rtv_workbook = xlrd.open_workbook(xls_path)
+    # shipment = rtv_workbook.sheet_by_name('Shipment')
+    #
+    # for row in range(0, shipment.nrows):
+    #
+    #     hold = shipment.cell_value(rowx=row, colx=22)
+    #     # hold = shipment.cell_value(rowx=row, colx=23)
+    #     print(hold)
+    #     if re.search(etr, hold, re.IGNORECASE):
+    #         inv_num = "{}" .format(shipment.cell_value(row, 21))
+    #         # inv_num = "{}".format(shipment.cell_value(row, 22))
+    #         f_data['inv'] = inv_num.replace(" ", "")
+    #         print(f_data['inv'])
+    #         # f_data['rt'] = str(shipment.cell(row, 4).value).replace(" ", "")
+    #         # f_data['qty'] = str(shipment.cell(row, 9).value).replace(" ", "")
+    #         return True
+    # return False
 
 
 if __name__ == '__main__':
