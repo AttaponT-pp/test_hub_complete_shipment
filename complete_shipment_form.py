@@ -19,17 +19,43 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
         super(CompleteShipmentMainUi, self).__init__()
         self.form = Form.Ui_MainForm()
         self.form.setupUi(self)
-        self.setFixedSize(382, 352)
+        self.setFixedSize(380, 340)
         self.form.tabWidget.setCurrentIndex(0)
         self.fill_en()
         # connect events
         self.form.txten.returnPressed.connect(self.page_focus)
+        self.form.tabWidget.currentChanged.connect(self.tab_on_change)
         self.form.btn_oba_browse.clicked.connect(self.select_oba_file)
         self.form.btn_rtv_browse.clicked.connect(self.select_rtv_file)
         self.form.txt_inv.textChanged.connect(self.inv_count)
         self.form.txt_etr.textChanged.connect(self.etr_count)
         self.form.txt_inv.returnPressed.connect(self.get_invoice)
         self.form.txt_etr.returnPressed.connect(self.get_etr)
+
+    def tab_on_change(self):
+        tab_index = self.form.tabWidget.currentIndex()
+        print(self.form.tabWidget.currentIndex())
+        print(len(self.form.txten.text()))
+        if len(self.form.txten.text()) != 6:
+            self.fill_en()
+        else:
+            if tab_index == 0:
+                if self.form.oba_file_path.toPlainText() == '':
+                    self.form.btn_oba_browse.setFocus()
+                    self.form.lbl_app_status.setText('Browse your OBA Request File.')
+                else:
+                    self.form.txt_inv.setFocus()
+                    self.form.txt_inv.setText('')
+                    self.form.lbl_app_status.setText('Scan Invoice#')
+
+            else:
+                if self.form.rtv_file_path.toPlainText() == '':
+                    self.form.btn_rtv_browse.setFocus()
+                    self.form.lbl_app_status.setText('Browse your Daily Shipment Request File.')
+                else:
+                    self.form.txt_etr.setFocus()
+                    self.form.txt_etr.setText('')
+                    self.form.lbl_app_status.setText('Scan ETR No.')
 
     def get_invoice(self):
         now = datetime.datetime.now()
@@ -97,7 +123,10 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
                 print('Opn.1501 param: {}'.format(opn1501_param))
                 print('Data stream: {}'.format(data1501))
                 # hand_check data and operation
+                inv_last_opn = get_last_opn(inv_num)
+                print(inv_last_opn)
                 route_check = valid_inv('1501', inv_num)
+                print('Hand-Check: {}'.format(route_check['status']))
                 if route_check['status']:
                     # save FITS data
                     print('Recording data...')
@@ -115,8 +144,9 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
                         self.form.lbl_app_status.setText('FITS Error: Cannot save opn.1501')
                         return
                 else:
-                    self.form.lbl_app_status.setText('FITSDLL Error')
-                    mbox(u'FITSDLL Error', Unicode(route_check["msg"]), 0)
+                    self.form.lbl_app_status.setText('FITSDLL Error: {}'.format(route_check["msg"]))
+                    self.form.textEdit.setStyleSheet("background-color: rgb(255, 0, 0);")
+                    mbox(u'FITSDLL Error', route_check["msg"], 0)
                     return
 
             if which_opn['opn702']:
@@ -141,23 +171,26 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
                             print('Opn.702 param: {}'.format(opn702_param))
                             print('Record data...')
                             if record2fit('702', opn702_param, data702):
+                                print('Save SN: {} successful.'.format(sn))
                                 self.form.txt_inv.setFocus()
                                 self.form.txt_inv.setText('')
                                 self.form.textEdit_2.setStyleSheet("background-color: rgb(0, 255, 0);")
                                 self.form.lbl_app_status.setText('Invoice no.{} : {} successful.'.format(inv_num, sn))
                             else:
+                                print('Save SN: {} error.'.format(sn))
                                 self.form.txt_inv.setFocus()
                                 self.form.txt_inv.setText('')
                                 self.form.textEdit_2.setStyleSheet("background-color: rgb(255, 0, 0);")
                                 self.form.lbl_app_status.setText('FITS Error: Cannot save opn.702')
                                 return
                         else:
+                            self.form.textEdit_2.setStyleSheet("background-color: rgb(255, 0, 0);")
+                            self.form.lbl_app_status.setText('This SN: {} does not pack yet'.format(sn))
                             print('This SN: {} does not pack yet'.format(sn))
-                            return
                     else:
-                        self.form.lbl_app_status.setText('FITSDLL Error')
-                        mbox(u'FITSDLL Error', Unicode(route_check["msg"]), 0)
-                        return
+                        print('SN:{} route check error.'.format(sn))
+                        self.form.lbl_app_status.setText('SN: {} route check error.'.format(sn))
+                        self.form.textEdit_2.setStyleSheet("background-color: rgb(255, 0, 0);")
         else:
             mbox('Not found Invoice# {}'.format(inv_num), 'Not found Invoice# {} in OBA Summary File'.format(inv_num), 0)
             return
@@ -222,13 +255,15 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
             # tmp_qty = f_data['qty']
 
             # Get RTV Shipment Blocking
-            block_status = check_block_rtv(etr)
-            if block_status == "YES":
+            data1502 = str(prepare_etr_info(etr))
+            block_rtv_status = data1502.split(',')[6]
+            if block_rtv_status == "YES":
                 mbox("Warning !!!", "This ETR Number:" + etr + ". have been blocked in Opn.924 RTV Shipment Blocking"
                                                                "Please inform case owner for unblock.")
                 self.form.lbl_app_status.setText("ETR Number:" + etr + " have been blocked RTV Shipment")
                 self.form.txt_etr.setFocus()
                 self.form.txt_etr.setText("")
+                return
 
             self.form.lbl_app_status.setText('Found Invoice {}'.format(tmp_inv))
             which_opn = self.check_opn_box()
@@ -239,14 +274,19 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
 
             if which_opn["opn1502"]:
                 # Create data_str input stream
-                data_str = filled_en + ',' + tmp_inv + ',' + etr + ',' + block_status
+                data_str = filled_en + ',' + tmp_inv + ',' + etr + ',' + block_rtv_status
                 fit_status = valid_inv('1502', tmp_inv)
                 if fit_status["status"]:
                     # Add Parameter 'RTV Shipment Blocking'
+                    param1502_param = 'OPERATOR,Invoice No,ETR Number,Part Number,Supplier Name,RT,PO No.,' \
+                                      'RTV Shipment Request,Build Type,RTV Shipment Blocking'
                     param1502_str = 'OPERATOR,Invoice No,ETR Number,RTV Shipment Blocking'
                     print(param1502_str)
+                    print(param1502_param)
                     print(data_str)
-                    if record2fit('1502', param1502_str, data_str) == 'True':
+                    # if record2fit('1502', param1502_param, data_str):
+                    if record2fit('1502', param1502_str, data_str):
+                        print('ETR No.{} is save with Invoice No.{} successful.'.format(etr, tmp_inv))
                         self.form.lbl_app_status.setText('FITS1502 Saved for {}'.format(etr))
                         self.form.txt_etr.setText("")
                         self.form.txt_etr.setFocus()
@@ -338,7 +378,7 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
         rtv_path = str(self.form.rtv_file_path.toPlainText())
         if not len(en) == 6:
             mbox("EN Validation", "Your EN is not valid.\nPlease try again.", 0)
-            self.input_en()
+            self.fill_en()
             return
         else:
             if self.form.tabWidget.currentIndex() == 0:
@@ -364,26 +404,30 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
 
     def select_oba_file(self):
         dlg = QtWidgets.QFileDialog.getOpenFileName()
+        print(dlg)
         if dlg[0] == '':
-            mbox('OBA Request File Selection', 'No file select', 0)
-            self.form.oba_file_path.toPlainText('')
+            mbox('OBA Request File Selection', 'No OBA Request file select', 0)
+            self.form.oba_file_path.setText(dlg[0])
         else:
             print('Selected file: {}'.format(dlg))
             self.form.oba_file_path.setText(dlg[0])
             self.form.txt_inv.setFocus()
             self.form.txt_inv.setText('')
+            self.form.lbl_app_status.setText('Scan Invoice#')
             return
 
     def select_rtv_file(self):
         dlg = QtWidgets.QFileDialog.getOpenFileName()
+        print(dlg)
         if dlg[0] == '':
-            mbox('Daily Shipment Request File Selection', 'No file select', 0)
-            self.form.rtv_file_path.toPlainText('')
+            mbox('Daily Shipment Request File Selection', 'No Daily Shipment Request file select', 0)
+            self.form.rtv_file_path.setText(dlg[0])
         else:
             print('Selected file: {}'.format(dlg))
             self.form.rtv_file_path.setText(dlg[0])
             self.form.txt_etr.setFocus()
             self.form.txt_etr.setText('')
+            self.form.lbl_app_status.setText('Scan ETR No.')
             return
 
     def etr_count(self):
@@ -437,21 +481,20 @@ def cross_check_etr(xls_path, etr, f_data):
     rtv_wb = load_workbook(xls_path)
     shipment = rtv_wb.active
     print(shipment.title)
-    for row in range(0, shipment.max_row):
-        if shipment.cell(row=row, column=12).value is None:
+    for row in range(5, shipment.max_row):
+        if shipment.cell(row=row, column=23).value is None:
             break
         # get ETR#
         tmp_etr = shipment.cell(row=row, column=23).value
         print(tmp_etr)
         if re.search(etr, tmp_etr, re.IGNORECASE):
-            delivery_num = shipment.cell(row=row, column=22).value
-            f_data['inv'] = delivery_num
+            f_data['inv'] = str(shipment.cell(row=row, column=22).value)
             return True
     return False
-
     # rtv_workbook = xlrd.open_workbook(xls_path)
+    # print(rtv_workbook.get_sheets())
     # shipment = rtv_workbook.sheet_by_name('Shipment')
-    #
+    # print(shipment.name)
     # for row in range(0, shipment.nrows):
     #
     #     hold = shipment.cell_value(rowx=row, colx=22)

@@ -16,7 +16,7 @@ opn702_param = 'OPERATOR,Invoice No,Serial No,Packing Qty,Packing No'
 def init(opn):
     # Give location of dll
     # fits_dll = client.Dispatch("FITSDLL.clsDB")
-    status = fits_dll.fn_InitDB(opn, rev,'')
+    status = fits_dll.fn_InitDB(opn, rev, '')
 
     print("init=" + status)
     return status
@@ -27,6 +27,7 @@ def handshake(fits_dll, opn, inv):
     # fits_dll = client.Dispatch("FITSDLL.clsDB")
     status = fits_dll.fn_handshake('*', opn, rev, inv)
     print("handshake = " + status)
+    fits_dll.closeDB
     return status
 
 
@@ -34,6 +35,7 @@ def query(fits_dll, opn, sn, param, fs):
     # fn_query(model,operation,revision,serial,parameters[,fsp]);
     status = fits_dll.fn_query('*', opn, rev, sn,param,fs)
     print("query status: " + str(status))
+    fits_dll.closeDB
     return status
 
 
@@ -45,11 +47,11 @@ def log(opt, param, data, fs):
     status = fits_dll.fn_InitDB(model, opt, rev, "")
     status = fits_dll.fn_log(model,opt,rev,param,data,fs)
     print("log status: " + str(status))
+    fits_dll.closeDB
     return status
 
 
 def valid_inv(opn, inv):
-
     # fits_dll = client.Dispatch("FITSDLL.clsDB")
     if init(opn) == 'True':
         if handshake(fits_dll, opn, inv) == 'True':
@@ -67,23 +69,28 @@ def get_necessory_data(opn, rt, param):
     # print "query status: " + str(status)
     output = status.split(',')
     # print output
-
+    fits_dll.closeDB
     return output
 
 
 def record2fit(opn, param, data):
+    fits_dll = client.Dispatch("FITSDLL.clsDB")
+    if not fits_dll.fn_InitDB('*', '*', rev):
+        return False
     status = fits_dll.fn_log('*', opn, rev, param, data, ',')
-    # print status
+    print(status)
+    fits_dll.closeDB
     return status
 
 
 def get_sn_list(rt):
     fits_dll = client.Dispatch("FITSDLL.clsDB")
-    if not fits_dll.fn_InitDB('*', rev, ''):
+    if not fits_dll.fn_InitDB('*', '*', rev):
         return False
     # sn_list = fits_dll.fn_query('*', '151', 'RT', '*', rt, ',')
     sn_list = fits_dll.fn_query('*', '151', 'RT', '*', rt, ',')
     print(sn_list)
+    fits_dll.closeDB
     return sn_list
 
 
@@ -92,6 +99,7 @@ def get_last_opn(sn):
     if not fits_dll.fn_InitDB('*', rev, ''):
         return False
     last_opn = fits_dll.fn_Query('*', "*", rev, sn, "last_opn", ',')
+    fits_dll.closeDB
     return last_opn
 
 
@@ -99,16 +107,36 @@ def get_last_opn(sn):
 def check_block_rtv(etr):
     if init("*") == "True":
         # Get RT from opn.1303 ETR
-        rt = fits_dll.fn_query("*", "1303", rev, etr, "RT")
+        rt = fits_dll.fn_query("*", "1303", rev, etr, "RT", ',')
         print("RT of ETR number:"+ etr + " " + "is " + rt)
         # Check RT in Opn.924 RTV Shipment Blocking
         result = fits_dll.fn_query("*", "924", rev, rt, "RTV Shipment Blocking")
-        print("RTV Shipment Blocking = " + result)
+        print("RTV Shipment Blocking = {}".format(result))
+        fits_dll.closeDB
         return result
     else:
-        result = int("*")
+        result = init("*")
         return result
 
+
+def prepare_etr_info(etr):
+    if init("*") == "True":
+        # Get RT from opn.1303 ETR
+        data1303 = fits_dll.fn_query("*", "1303", rev, etr, "Part Number,Supplier Name,RT,PO No.,Fail Qty", ',')
+        print(data1303)
+        rt = fits_dll.fn_query("*", "1303", rev, etr, "RT", ',')
+        build_type = fits_dll.fn_query("*", "101", rev, rt, "Build Type", ',')
+        print("RT of ETR number:"+ etr + " " + "is " + rt)
+        # Check RT in Opn.924 RTV Shipment Blocking
+        result = fits_dll.fn_query("*", "924", rev, rt, "RTV Shipment Blocking")
+        print("RTV Shipment Blocking = {}".format(result))
+        etr_data = data1303 + ',' + build_type + ',' + result
+        print(etr_data)
+        fits_dll.closeDB
+        return etr_data
+    else:
+        result = init("*")
+        return result
 
 def prepare_oba_info(packing_num):
     print("Input Packing no. = {}".format(packing_num))
@@ -123,6 +151,7 @@ def prepare_oba_info(packing_num):
     result = 'Accept'
     print(opn602_data + ',' + pass_kitting_qty + ',' + pid + ',' + result)
     oba_data = opn602_data + ',' + pass_kitting_qty + ',' + pid + ',' + result
+    fits_dll.closeDB
     return oba_data
 
 
@@ -149,6 +178,7 @@ def find_packing_num(rt):
         else:
             list_of_unique_num.append(num)
     print('Unique packing number: {}'.format(list_of_unique_num))
+    fits_dll.closeDB
     return list_of_unique_num
 
 
@@ -169,15 +199,26 @@ def save_opn702(rt, inv_num, packing_num, packing_qty):
         #     print(opn702_param)
         #     result = fits_dll.fn_log('*', '702', rev, opn702_param, data, ',')
         #     print(result)
+    fits_dll.closeDB
     return True
+
 
 if __name__ == '__main__':
     RT = '2222221'
     packing_num = 'P210310015'
     packing_qty = '3'
     inv_num = '7777777'
+    etr = 'R20210130'
     # receiving_data = get_receiving(RT)
     # packing_number = find_packing_num(RT)
     # prepare_oba_info(packing_num)
-    save_opn702(RT, inv_num, packing_num, packing_qty)
-    # valid_inv('702', 'LCC24241234')
+    # save_opn702(RT, inv_num, packing_num, packing_qty)
+    prepare_etr_info(etr)
+    # result = valid_inv('702', 'LCC2424A3DS')
+    # print(result['status'])
+    # print(type(result['status']))
+    # if result['status']:
+    #     print('Allow')
+    # else:
+    #     print('Not-Allow')
+    # print(get_last_opn(inv_num))
