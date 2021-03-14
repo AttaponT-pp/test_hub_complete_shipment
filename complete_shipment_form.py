@@ -6,7 +6,6 @@ import datetime, time
 import xlrd
 from openpyxl import *
 from PyQt5 import QtWidgets
-from win32api import Unicode
 import Form
 
 import ctypes
@@ -278,11 +277,8 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
                 fit_status = valid_inv('1502', tmp_inv)
                 if fit_status["status"]:
                     # Add Parameter 'RTV Shipment Blocking'
-                    param1502_param = 'OPERATOR,Invoice No,ETR Number,Part Number,Supplier Name,RT,PO No.,' \
-                                      'RTV Shipment Request,Build Type,RTV Shipment Blocking'
                     param1502_str = 'OPERATOR,Invoice No,ETR Number,RTV Shipment Blocking'
                     print(param1502_str)
-                    print(param1502_param)
                     print(data_str)
                     # if record2fit('1502', param1502_param, data_str):
                     if record2fit('1502', param1502_str, data_str):
@@ -296,7 +292,7 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
                         self.form.textEdit_3.setStyleSheet("background-color: rgb(255, 0, 0);")
                         return
                 else:
-                    mbox(u'FITSDLL Error', Unicode(fit_status["msg"]), 0)
+                    mbox(u'FITSDLL Error', fit_status["msg"], 0)
                     self.form.textEdit_3.setStyleSheet("background-color: rgb(255, 0, 0);")
                     return
 
@@ -331,7 +327,7 @@ class CompleteShipmentMainUi(QtWidgets.QMainWindow):
                                 ship_data_str = data_str + ',' + sn + ',' + data1303[len(data1303) - 1]
                                 print(ship_data_str)
 
-                                if record2fit('1801', param1801_str, ship_data_str) == 'True':
+                                if record2fit('1801', param1801_str, ship_data_str):
                                     self.form.lbl_app_status.setText('FITS1801 Saved for {}'.format(etr))
                                     self.form.txt_etr.setText("")
                                     self.form.txt_etr.setFocus()
@@ -481,7 +477,7 @@ def cross_check_etr(xls_path, etr, f_data):
     rtv_wb = load_workbook(xls_path)
     shipment = rtv_wb.active
     print(shipment.title)
-    for row in range(5, shipment.max_row):
+    for row in range(5, shipment.max_row + 1):
         if shipment.cell(row=row, column=23).value is None:
             break
         # get ETR#
@@ -496,7 +492,7 @@ def cross_check_etr(xls_path, etr, f_data):
     # shipment = rtv_workbook.sheet_by_name('Shipment')
     # print(shipment.name)
     # for row in range(0, shipment.nrows):
-    #
+    
     #     hold = shipment.cell_value(rowx=row, colx=22)
     #     # hold = shipment.cell_value(rowx=row, colx=23)
     #     print(hold)
@@ -509,7 +505,6 @@ def cross_check_etr(xls_path, etr, f_data):
     #         # f_data['qty'] = str(shipment.cell(row, 9).value).replace(" ", "")
     #         return True
     # return False
-
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)

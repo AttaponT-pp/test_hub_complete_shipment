@@ -1,5 +1,6 @@
 from win32com import client
 
+model = '*'
 rev = '2.9.0.0'
 fits_dll = client.Dispatch("FITSDLL.clsDB")
 
@@ -42,7 +43,7 @@ def query(fits_dll, opn, sn, param, fs):
 def log(opt, param, data, fs):
     # fn_log(model,operation,revision,parameters,values[,fsp]);
     global model, rev
-
+    
     fits_dll = client.Dispatch("FITSDLL.clsDB")
     status = fits_dll.fn_InitDB(model, opt, rev, "")
     status = fits_dll.fn_log(model,opt,rev,param,data,fs)
